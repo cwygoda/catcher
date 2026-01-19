@@ -57,7 +57,12 @@ func main() {
 
 	// Initialize HTTP server
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	srv := httpAdapter.NewServer(svc, addr)
+	srv := httpAdapter.NewServer(svc, addr, cfg.Secret)
+	if cfg.Secret != "" {
+		log.Println("webhook signature verification enabled")
+	} else {
+		log.Println("warning: no secret configured, webhook verification disabled")
+	}
 
 	// Initialize worker
 	w := worker.New(svc, registry, cfg.PollInterval, cfg.MaxRetries)

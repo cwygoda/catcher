@@ -1,0 +1,24 @@
+# Example config for LaunchDaemon deployment
+# Copy to /etc/catcher/config.toml and customize
+#
+# IMPORTANT: Use absolute paths (no ~ expansion in daemon context)
+
+# Webhook signing secret (optional, but recommended)
+# Can also be set via CATCHER_SECRET env var
+# secret = "generate-a-strong-secret-here"
+
+[[processor]]
+name = "youtube"
+pattern = "youtube\\.com|youtu\\.be"
+command = "/opt/homebrew/bin/yt-dlp"
+args = ["-o", "%(title)s.%(ext)s", "{url}"]
+target_dir = "/Users/YOUR_USERNAME/Videos"
+isolate = true
+
+[[processor]]
+name = "gallery-dl"
+pattern = "instagram\\.com|twitter\\.com|reddit\\.com"
+command = "/opt/homebrew/bin/gallery-dl"
+args = ["{url}"]
+target_dir = "/Users/YOUR_USERNAME/Pictures"
+isolate = true

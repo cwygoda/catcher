@@ -45,3 +45,13 @@ clean:
 ## install: install binary to GOPATH/bin
 install:
 	go install ./cmd/catcher
+
+## install-daemon: install as macOS LaunchDaemon (requires sudo)
+install-daemon: build
+	@echo "Installing LaunchDaemon..."
+	sudo ./deploy/install.sh
+
+## uninstall-daemon: remove LaunchDaemon (requires sudo)
+uninstall-daemon:
+	@echo "Uninstalling LaunchDaemon..."
+	sudo ./deploy/uninstall.sh

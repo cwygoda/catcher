@@ -1,12 +1,18 @@
 package http
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cwygoda/catcher/internal/domain"
 )
@@ -16,13 +22,15 @@ type Server struct {
 	svc    *domain.JobService
 	mux    *http.ServeMux
 	server *http.Server
+	secret string
 }
 
 // NewServer creates a new HTTP server.
-func NewServer(svc *domain.JobService, addr string) *Server {
+func NewServer(svc *domain.JobService, addr string, secret string) *Server {
 	s := &Server{
-		svc: svc,
-		mux: http.NewServeMux(),
+		svc:    svc,
+		mux:    http.NewServeMux(),
+		secret: secret,
 	}
 	s.routes()
 	s.server = &http.Server{
@@ -60,8 +68,24 @@ type errorResponse struct {
 }
 
 func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
+	// Read body for verification and parsing
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	// Verify signature if secret is configured
+	if s.secret != "" {
+		if err := s.verifySignature(r, body); err != nil {
+			log.Printf("webhook verification failed: %v", err)
+			s.writeError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+	}
+
 	var req webhookRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
@@ -83,6 +107,46 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusCreated, jobToResponse(job))
+}
+
+const maxTimestampSkew = 5 * time.Minute
+
+func (s *Server) verifySignature(r *http.Request, body []byte) error {
+	// Check X-Timestamp header
+	timestamp := r.Header.Get("X-Timestamp")
+	if timestamp == "" {
+		return fmt.Errorf("missing X-Timestamp header")
+	}
+
+	ts, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return fmt.Errorf("invalid X-Timestamp: must be ISO8601/RFC3339 format")
+	}
+
+	skew := time.Since(ts)
+	if skew < 0 {
+		skew = -skew
+	}
+	if skew > maxTimestampSkew {
+		return fmt.Errorf("X-Timestamp too far from current time (skew: %v, max: %v)", skew.Truncate(time.Second), maxTimestampSkew)
+	}
+
+	// Check X-Signature header
+	signature := r.Header.Get("X-Signature")
+	if signature == "" {
+		return fmt.Errorf("missing X-Signature header")
+	}
+
+	// Calculate expected signature: SHA256("${timestamp}\n${body}\n${secret}")
+	payload := fmt.Sprintf("%s\n%s\n%s", timestamp, string(body), s.secret)
+	hash := sha256.Sum256([]byte(payload))
+	expected := hex.EncodeToString(hash[:])
+
+	if signature != expected {
+		return fmt.Errorf("invalid signature")
+	}
+
+	return nil
 }
 
 func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {

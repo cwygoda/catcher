@@ -3,7 +3,10 @@ package http
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,7 +58,7 @@ func (m *mockRepo) RecoverStale(ctx context.Context) (int64, error)             
 func setupTestServer() *Server {
 	repo := newMockRepo()
 	svc := domain.NewJobService(repo)
-	return NewServer(svc, ":8080")
+	return NewServer(svc, ":8080", "")
 }
 
 func TestServer_Webhook_Success(t *testing.T) {
@@ -220,5 +223,151 @@ func TestServer_ContentType(t *testing.T) {
 	ct := rec.Header().Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+	}
+}
+
+// Helper to compute signature
+func computeSignature(timestamp, body, secret string) string {
+	payload := fmt.Sprintf("%s\n%s\n%s", timestamp, body, secret)
+	hash := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(hash[:])
+}
+
+func TestServer_Webhook_SignatureValid(t *testing.T) {
+	repo := newMockRepo()
+	svc := domain.NewJobService(repo)
+	srv := NewServer(svc, ":8080", "test-secret")
+
+	body := `{"url":"https://example.com"}`
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	signature := computeSignature(timestamp, body, "test-secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Signature", signature)
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d; body: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+}
+
+func TestServer_Webhook_MissingTimestamp(t *testing.T) {
+	repo := newMockRepo()
+	svc := domain.NewJobService(repo)
+	srv := NewServer(svc, ":8080", "test-secret")
+
+	body := `{"url":"https://example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Signature", "anything")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestServer_Webhook_InvalidTimestampFormat(t *testing.T) {
+	repo := newMockRepo()
+	svc := domain.NewJobService(repo)
+	srv := NewServer(svc, ":8080", "test-secret")
+
+	body := `{"url":"https://example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Timestamp", "not-a-timestamp")
+	req.Header.Set("X-Signature", "anything")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestServer_Webhook_TimestampTooOld(t *testing.T) {
+	repo := newMockRepo()
+	svc := domain.NewJobService(repo)
+	srv := NewServer(svc, ":8080", "test-secret")
+
+	body := `{"url":"https://example.com"}`
+	timestamp := time.Now().UTC().Add(-10 * time.Minute).Format(time.RFC3339)
+	signature := computeSignature(timestamp, body, "test-secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Signature", signature)
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestServer_Webhook_MissingSignature(t *testing.T) {
+	repo := newMockRepo()
+	svc := domain.NewJobService(repo)
+	srv := NewServer(svc, ":8080", "test-secret")
+
+	body := `{"url":"https://example.com"}`
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Timestamp", timestamp)
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestServer_Webhook_InvalidSignature(t *testing.T) {
+	repo := newMockRepo()
+	svc := domain.NewJobService(repo)
+	srv := NewServer(svc, ":8080", "test-secret")
+
+	body := `{"url":"https://example.com"}`
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Signature", "wrong-signature")
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestServer_Webhook_NoSecretConfigured(t *testing.T) {
+	// When no secret is configured, verification is skipped
+	srv := setupTestServer() // secret=""
+
+	body := `{"url":"https://example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	// No X-Timestamp or X-Signature headers
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d (no secret = no verification)", rec.Code, http.StatusCreated)
 	}
 }

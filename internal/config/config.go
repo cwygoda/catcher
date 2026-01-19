@@ -23,6 +23,7 @@ type ProcessorConfig struct {
 
 // fileConfig represents the TOML file structure.
 type fileConfig struct {
+	Secret     string            `toml:"secret"`
 	Processors []ProcessorConfig `toml:"processor"`
 }
 
@@ -33,6 +34,7 @@ type Config struct {
 	PollInterval time.Duration
 	MaxRetries   int
 	ConfigPath   string
+	Secret       string
 	Processors   []ProcessorConfig
 }
 
@@ -88,6 +90,7 @@ func Load() *Config {
 		log.Printf("loading config from %s", configPath)
 		var fc fileConfig
 		if _, err := toml.DecodeFile(configPath, &fc); err == nil {
+			cfg.Secret = fc.Secret
 			cfg.Processors = fc.Processors
 			log.Printf("found %d processor(s) in config", len(cfg.Processors))
 		} else {
@@ -107,6 +110,10 @@ func Load() *Config {
 	if db := os.Getenv("CATCHER_DB"); db != "" {
 		cfg.DBPath = db
 		log.Printf("CATCHER_DB override: %s", db)
+	}
+	if secret := os.Getenv("CATCHER_SECRET"); secret != "" {
+		cfg.Secret = secret
+		log.Println("CATCHER_SECRET override from environment")
 	}
 
 	return cfg

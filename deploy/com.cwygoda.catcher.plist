@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cwygoda.catcher</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/catcher</string>
+        <string>--config</string>
+        <string>/etc/catcher/config.toml</string>
+        <string>--db</string>
+        <string>/var/lib/catcher/jobs.db</string>
+    </array>
+
+    <key>UserName</key>
+    <string>{{USER}}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/{{USER}}</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/catcher/catcher.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/var/log/catcher/catcher.err</string>
+
+    <key>WorkingDirectory</key>
+    <string>/var/lib/catcher</string>
+</dict>
+</plist>
