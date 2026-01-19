@@ -12,8 +12,9 @@ type mockProcessor struct {
 	matcher func(string) bool
 }
 
-func (m *mockProcessor) Name() string                                  { return m.name }
-func (m *mockProcessor) Match(url string) bool                         { return m.matcher(url) }
+func (m *mockProcessor) Name() string                                       { return m.name }
+func (m *mockProcessor) TargetDir() string                                  { return "/tmp/test" }
+func (m *mockProcessor) Match(url string) bool                              { return m.matcher(url) }
 func (m *mockProcessor) Process(ctx context.Context, job *domain.Job) error { return nil }
 
 func TestRegistry_Register(t *testing.T) {

@@ -17,6 +17,7 @@ type JobRepository interface {
 // URLProcessor is the driven port for URL processing.
 type URLProcessor interface {
 	Name() string
+	TargetDir() string
 	Match(url string) bool
 	Process(ctx context.Context, job *Job) error
 }

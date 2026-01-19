@@ -36,10 +36,10 @@ func TestDefaultDBPath(t *testing.T) {
 	})
 }
 
-func TestDefaultVideoDir(t *testing.T) {
-	path := DefaultVideoDir()
+func TestDefaultTargetDir(t *testing.T) {
+	path := DefaultTargetDir()
 	if !strings.HasSuffix(path, "Videos") {
-		t.Errorf("DefaultVideoDir() = %q, want suffix Videos", path)
+		t.Errorf("DefaultTargetDir() = %q, want suffix Videos", path)
 	}
 }
 

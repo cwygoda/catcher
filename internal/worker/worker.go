@@ -72,7 +72,7 @@ func (w *Worker) processJob(ctx context.Context, job *domain.Job) {
 		return
 	}
 
-	log.Printf("job %d: processing with %s", job.ID, proc.Name())
+	log.Printf("job %d: processing with %s -> %s", job.ID, proc.Name(), proc.TargetDir())
 
 	// Refresh job to get updated attempts count
 	job, err := w.svc.Get(ctx, job.ID)

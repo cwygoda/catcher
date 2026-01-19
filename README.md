@@ -23,7 +23,7 @@ curl localhost:8080/jobs/1
 | `--db` | `CATCHER_DB` | `$XDG_CACHE_HOME/catcher/jobs.db` | SQLite database path |
 | `--poll-interval` | - | 5s | Worker poll interval |
 | `--max-retries` | - | 3 | Max retry attempts |
-| `--video-dir` | `CATCHER_VIDEO_DIR` | `~/Videos` | Download directory |
+| `--config` | - | `$XDG_CONFIG_HOME/catcher/config.toml` | Config file path |
 
 ## API
 
@@ -47,8 +47,26 @@ Health check.
 
 ## Processors
 
-Currently supported:
-- **YouTube** - Downloads via `yt-dlp` (must be installed)
+Processors are defined in `config.toml`:
+
+```toml
+[[processor]]
+name = "youtube"
+pattern = "youtube\\.com|youtu\\.be"
+command = "yt-dlp"
+args = ["-o", "%(title)s.%(ext)s", "{url}"]
+target_dir = "~/Videos"
+isolate = true  # default: run in temp dir, move files on success
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `name` | yes | - | Processor name (for logging) |
+| `pattern` | yes | - | Regex to match URLs |
+| `command` | yes | - | Command to execute |
+| `args` | yes | - | Arguments (`{url}` replaced with job URL) |
+| `target_dir` | no | `~/Videos` | Final destination for files |
+| `isolate` | no | `true` | Run in temp dir, move on success |
 
 URLs are matched by regex. First matching processor handles the job.
 
@@ -75,10 +93,25 @@ internal/
 - **Retry logic** - Failed jobs retry up to max-retries
 - **Graceful shutdown** - Waits for in-flight requests
 
+## Logging
+
+Catcher logs key events to stdout:
+
+```
+loading config from /home/user/.config/catcher/config.toml
+found 2 processor(s) in config
+registered processor: youtube (pattern: youtube\.com, target: ~/Videos)
+job 1: processing with youtube -> /home/user/Videos
+job 1: running isolated in /tmp/catcher-job-1-abc123
+job 1: found 2 file(s): [video.mp4 thumbnail.jpg]
+job 1: moved 2 file(s) to /home/user/Videos
+job 1: completed with youtube for https://...
+```
+
 ## Requirements
 
 - Go 1.21+
-- `yt-dlp` (for YouTube downloads)
+- Commands referenced in processor configs (e.g., `yt-dlp`, `gallery-dl`)
 
 ## License
 

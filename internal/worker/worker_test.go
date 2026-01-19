@@ -143,7 +143,8 @@ type mockProcessor struct {
 	mu         sync.Mutex
 }
 
-func (p *mockProcessor) Name() string { return p.name }
+func (p *mockProcessor) Name() string      { return p.name }
+func (p *mockProcessor) TargetDir() string { return "/tmp/test" }
 func (p *mockProcessor) Match(url string) bool {
 	if p.matchFunc != nil {
 		return p.matchFunc(url)

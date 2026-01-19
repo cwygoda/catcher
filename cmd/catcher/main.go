@@ -22,7 +22,6 @@ func main() {
 
 	log.Printf("starting catcher on port %d", cfg.Port)
 	log.Printf("database: %s", cfg.DBPath)
-	log.Printf("video dir: %s", cfg.VideoDir)
 
 	// Initialize SQLite repository
 	repo, err := sqlite.New(cfg.DBPath)
@@ -41,9 +40,20 @@ func main() {
 		log.Printf("recovered %d stale jobs", recovered)
 	}
 
-	// Initialize processor registry
+	// Initialize processor registry from config
 	registry := processor.NewRegistry()
-	registry.Register(processor.NewYouTubeProcessor(cfg.VideoDir))
+	for _, pc := range cfg.Processors {
+		p, err := processor.NewCommandProcessor(pc)
+		if err != nil {
+			log.Fatalf("invalid processor %q: %v", pc.Name, err)
+		}
+		registry.Register(p)
+		log.Printf("registered processor: %s (pattern: %s, target: %s)", pc.Name, pc.Pattern, p.TargetDir())
+	}
+
+	if len(cfg.Processors) == 0 {
+		log.Println("warning: no processors configured")
+	}
 
 	// Initialize HTTP server
 	addr := fmt.Sprintf(":%d", cfg.Port)
